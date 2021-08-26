@@ -1,0 +1,8 @@
+{
+		"name": "apps.think_black_ink.com",
+		"integrations": {
+			"cordova": {
+			}
+		},
+		"type": "custom"	
+}
