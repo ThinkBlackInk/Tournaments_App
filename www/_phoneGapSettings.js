@@ -56,11 +56,7 @@ function _phoneGapSettings() {
         "cordova-plugin-alpha-wkwebview-file-xhrhttps://github.com/remoorejr/cordova-plugin-alpha-wkwebview-file-xhr.git": "git",
         "cordova-plugin-zip": "npm",
         "cordova-plugin-x-toast": "npm",
-        "cordova-plugin-whitelist": "npm",
-        "cordova-plugin-android-permissions": "npm",
-        "cordova-plugin-appavailability": "npm",
-        "cordova-openhttps://github.com/remoorejr/cordova-open.git": "git",
-        "DocumentHandlerhttps://github.com/remoorejr/DocumentHandler.git": "git"
+        "cordova-plugin-whitelist": "npm"
     }
 };
 }
