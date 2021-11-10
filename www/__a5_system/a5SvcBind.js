@@ -1,4 +1,27 @@
 // Service handler
+window.A5.ServiceHandleUtility = {
+    firebaseFixupData : function(data) {
+        if(Object.prototype.toString.call(data) === '[object Array]') {
+            for( var i = 0 ; i < data.length ; ++i ) {
+                data[i] = A5.ServiceHandleUtility.firebaseFixupData( data[i] );
+            }
+        } else if( typeof data == 'object' ) {
+            for (var key in data) {
+                var item = data[key];
+                if( typeof item == 'object' ) {
+                    data[key] = A5.ServiceHandleUtility.firebaseFixupData(item);
+                }
+            }
+            if( data && data['seconds'] && !data['_seconds'] ) {
+                data['_seconds'] = data['seconds'];
+            }
+            if( data && data['nanoseconds'] && !data['_nanoseconds'] ) {
+                data['_nanoseconds'] = data['nanoseconds'];
+            }
+        }
+        return data;
+    }
+};
 window.A5.ServiceHandler = Class.create({
 	initialize: function(_def) {
         var loadJS = function(url, implementationCode, location){
@@ -8,6 +31,7 @@ window.A5.ServiceHandler = Class.create({
             scriptTag.onreadystatechange = implementationCode;
             location.appendChild(scriptTag);
         };
+
         this.def = _def;
         if( this.def.firebase ) {
             var fb = this.def.firebase;
@@ -20,7 +44,7 @@ window.A5.ServiceHandler = Class.create({
                     } else {
                         fb.onAfterLoad.push(resolve);
                     }
-                });                
+                });
             };
             var firebaseInit = function(def) {
                 if (typeof firebase !== 'undefined') {
@@ -38,6 +62,7 @@ window.A5.ServiceHandler = Class.create({
                     } else {
                         fbInst.initializeApp(obj.config);
                     }
+
                     // make auth and firestore references
                     obj.auth = fbInst.auth();
                     if( def.firebase.useEmulator ) {
@@ -47,24 +72,48 @@ window.A5.ServiceHandler = Class.create({
                     if( def.firebase.useEmulator ) {
                         obj.db.useEmulator("localhost",8080)
                     }
+
+
+
+/////////////////////
+
+                    if(def.firebase.enablePersistence) {
+                        // enable offline data / data sync
+                        obj.db.enablePersistence()
+                        .catch(function(err) {
+                        if (err.code == 'failed-precondition') {
+                            // probably multiple tabs open at once
+                            console.log('persistance failed');
+                        } else if (err.code == 'unimplemented') {
+                            // lack of browser support for the feature
+                            console.log('persistance not available');
+                        }
+                        });
+                    }
+
+///////////////////////
+
+
+
+
                     fb.loaded = true;
                     for( var i = 0 ; i < fb.onAfterLoad.length ; ++i ) {
                         fb.onAfterLoad[i]();
                     }
                     fb.onAfterLoad = [];
-                    //window.functions = fbInst.functions();   
+                    //window.functions = fbInst.functions();
                     if( obj.onAuthStateChanged ) {
                         obj.auth.onAuthStateChanged(user => {
                             obj.user = user;
                             if( obj.auth.currentUser ) {
                                 obj.auth.currentUser.getIdTokenResult().then(
-                                    tok => obj.onAuthStateChanged(obj,tok.token) 
-                                ).catch( err => obj.onAuthStateChanged(obj,null) );    
+                                    tok => obj.onAuthStateChanged(obj,tok.token)
+                                ).catch( err => obj.onAuthStateChanged(obj,null) );
                             } else {
                                 obj.onAuthStateChanged(obj,null);
                             }
                         });
-                    }                                                    
+                    }
                     return true;
                 }
                 return false;
@@ -80,12 +129,12 @@ window.A5.ServiceHandler = Class.create({
                         loadJS("__a5_system/googleapis/firebase-firestore.js", (e) => {
                             loadJS("__a5_system/googleapis/firebase-functions.js", (e) => {
                                  firebaseRetry();
-                            }, document.body);    
-                        }, document.body);    
+                            }, document.body);
+                        }, document.body);
                     }, document.body);
                 } , document.body);
             } else {
-                firebaseRetry();   
+                firebaseRetry();
             }
         }
     },
@@ -97,6 +146,7 @@ window.A5.ServiceHandler = Class.create({
                     obj.afterLoaded().then( function() {
                         obj.db.collection(_arguments.collectionName).doc(_arguments.key).get().then(doc => {
                             const rec = doc.data() || {};
+                            rec = A5.ServiceHandleUtility.firebaseFixupData(rec);
                             resolve(rec);
                         }).catch(err => reject(err.message));
                     });
@@ -126,8 +176,8 @@ window.A5.ServiceHandler = Class.create({
                             for (const property in _arguments.data) {
                                 recData[property] = _arguments.data[property];
                             }
-                            doc.set(recData).then(()=>{ 
-                                resolve(); 
+                            doc.set(recData).then(()=>{
+                                resolve();
                             }).catch(err=>reject(err.message));
                         } ).catch(err=>reject(err.message));
                     } else {
@@ -141,7 +191,7 @@ window.A5.ServiceHandler = Class.create({
         return new Promise((resolve, reject) => {
             reject("Missing parameters");
         });
-    },    
+    },
     recordDeletePromise: function(_arguments) {
         if( _arguments.collectionName && _arguments.key) {
             if( this.def.firebase ) {
@@ -186,7 +236,7 @@ window.A5.ServiceHandler = Class.create({
                                     }
                                 };
                                 for( var i = 0 ; i < items.length ; ++i ) {
-                                    (function(row,rowIndex) { 
+                                    (function(row,rowIndex) {
                                         var key = null;
                                         if( _arguments.idPropertyName ) {
                                             key = row[_arguments.idPropertyName];
@@ -198,10 +248,10 @@ window.A5.ServiceHandler = Class.create({
                                             endTrans(null);
                                         }).catch(err => endTrans(err.message));
                                     })(items[i],i);
-                                }                                
+                                }
                             });
                         });
-                    } else { 
+                    } else {
                         return new Promise((resolve, reject) => {
                             resolve(true);
                         });
@@ -255,12 +305,12 @@ window.A5.ServiceHandler = Class.create({
                                     }
                                     resolve(true);
                                     for( var i = 0 ; i < deletedRecs.length ; ++i ) {
-                                        _arguments.list.removeRowFromListByKey(deletedRecs[i]);                                        
+                                        _arguments.list.removeRowFromListByKey(deletedRecs[i]);
                                     }
-                                }                                 
+                                }
                             };
                             // Count the # of transactions we are expecting
-                            for( var i = 0 ; i < items.length ; ++i ) {                
+                            for( var i = 0 ; i < items.length ; ++i ) {
                                 var row = items[i];
                                 if( row._isDirty ) {
                                     if( row.__key__ ) {
@@ -276,8 +326,8 @@ window.A5.ServiceHandler = Class.create({
                             }
                             if( nTransaction > 0 ) {
                                 // Apply all the transactions..
-                                for( var i = 0 ; i < items.length ; ++i ) {                
-                                    (function(row,rowIndex) { 
+                                for( var i = 0 ; i < items.length ; ++i ) {
+                                    (function(row,rowIndex) {
                                         if( row._isDirty && row.__key__ ) {
                                             if( row._isDeleted ) {
                                                 collection.doc(row.__key__).get().then(doc => {
@@ -287,10 +337,10 @@ window.A5.ServiceHandler = Class.create({
                                             } else {
                                                 var recData = {};
                                                 for (const property in row) {
-                                                    if( property != '__key__' 
-                                                     && property != '_isDirty' 
-                                                     && property != '_isDeleted' 
-                                                     && property != '_isNewRow' 
+                                                    if( property != '__key__'
+                                                     && property != '_isDirty'
+                                                     && property != '_isDeleted'
+                                                     && property != '_isNewRow'
                                                      && property != '__displayStyle'
                                                      && property != '_oldData'
                                                      && property != '*key'
@@ -342,12 +392,12 @@ window.A5.ServiceHandler = Class.create({
         if( _arguments.limit ) {
             if( _arguments.offset && _arguments.offset > 0 ) {
                 query = query.limit(_arguments.limit + _arguments.offset);
-            } else {    
+            } else {
                 query = query.limit(_arguments.limit);
             }
         }
         if( _arguments.where ) {
-            if( Array.isArray(_arguments.where) ) {				
+            if( Array.isArray(_arguments.where) ) {
                 if( Array.isArray(_arguments.where[0]) ) {
                     for(var wi = 0 ; wi < _arguments.where.length ; ++wi ) {
                         var wherePtr = _arguments.where[wi];
@@ -391,6 +441,7 @@ window.A5.ServiceHandler = Class.create({
                     } else {
                         var data = JSON.parse(JSON.stringify(doc.data()));
                         data["__key__"] = doc.id
+                        data = A5.ServiceHandleUtility.firebaseFixupData(data);
                         listData.push( data );
                     }
                 });
@@ -398,6 +449,7 @@ window.A5.ServiceHandler = Class.create({
                 snapshot.docs.forEach(doc => {
                     var data = JSON.parse(JSON.stringify(doc.data()));
                     data["__key__"] = doc.id
+                    data = A5.ServiceHandleUtility.firebaseFixupData(data);
                     listData.push( data );
                 });
             }
@@ -421,12 +473,12 @@ window.A5.ServiceHandler = Class.create({
                     if( offset > 0 ) {
                         --offset;
                     } else {
-                        listData.push( doc.data() );
+                        listData.push( A5.ServiceHandleUtility.firebaseFixupData(doc.data()) );
                     }
                 });
             } else {
                 snapshot.docs.forEach(doc => {
-                    listData.push( doc.data() );
+                    listData.push( A5.ServiceHandleUtility.firebaseFixupData(doc.data()) );
                 });
             }
         }
@@ -435,7 +487,7 @@ window.A5.ServiceHandler = Class.create({
     queryPromise : function(_arguments) {
         if( this.def.firebase ) {
             var self = this;
-            var obj = this.def.firebase;            
+            var obj = this.def.firebase;
             return new Promise((resolve, reject) => {
                 obj.afterLoaded().then( function() {
                     var query = self.__queryCreateLow(obj,_arguments);
@@ -495,7 +547,7 @@ window.A5.ServiceHandler = Class.create({
             var fb = _def.firebase;
             var providerName = null;
             if( options.provider ) {
-                providerName = options.provider.toLowerCase();                
+                providerName = options.provider.toLowerCase();
                 if( providerName != 'google' && providerName != 'facebook' && providerName != 'twitter' && providerName != 'github' ) {
                     providerName = null;
                 }
@@ -550,7 +602,7 @@ window.A5.ServiceHandler = Class.create({
                     reject("Logout not handled");
                 }
             });
-        }    
+        }
         return new Promise((resolve, reject) => { reject("Login not handled");});
     }
 });
